@@ -6,7 +6,7 @@ Built as a deep-dive learning project into async Python and production-style API
 
 ## Live Demo
 
-🔗 **[cortex-xxxx.onrender.com/docs](#)** — interactive API docs, try it directly in your browser
+🔗 **[cortex-rnhl.onrender.com/docs](https://cortex-rnhl.onrender.com/docs)** — interactive API docs, try it directly in your browser
 *(Note: hosted on a free tier — the first request after inactivity may take 30–60s to wake up)*
 
 ## What it does
