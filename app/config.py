@@ -1,8 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
-
+load_dotenv(override=True)
 
 class Settings:
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
@@ -11,3 +10,4 @@ class Settings:
 
 
 settings = Settings()
+print("DEBUG - key in use:", settings.groq_api_key)  # TEMP
