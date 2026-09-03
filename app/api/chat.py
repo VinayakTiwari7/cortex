@@ -27,3 +27,14 @@ async def chat(request: ChatRequest) -> ChatResponse:
         return await cortex_router.complete(request)
     except AllProvidersFailedError as e:
         raise HTTPException(status_code=503, detail=f"all providers unavailable: {e}") from e
+
+@router.post("/chat/stream")
+async def chat_stream(request: ChatRequest):
+    async def event_generator():
+        try:
+            async for chunk in cortex_router.stream(request):
+                yield chunk
+        except AllProvidersFailedError as e:
+            yield f"\n[ERROR: all providers unavailable: {e}]"
+
+    return StreamingResponse(event_generator(), media_type="text/plain")

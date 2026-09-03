@@ -3,6 +3,7 @@ import logging
 from app.core.circuit_breaker import CircuitBreaker
 from app.providers.base import Provider, ProviderError
 from app.schemas.chat import ChatRequest, ChatResponse
+from collections.abc import AsyncGenerator
 
 logger = logging.getLogger("cortex.router")
 
@@ -18,19 +19,28 @@ class ProviderRouter:
     async def complete(self, request: ChatRequest) -> ChatResponse:
         last_error: Exception | None = None
 
+    async def stream(self, request: ChatRequest) -> AsyncGenerator[str, None]:
+        last_error: Exception | None = None
+
         for provider, breaker in self.providers:
             if breaker.is_open():
                 logger.warning("%s circuit open, skipping", provider.name)
                 continue
 
             try:
-                response = await provider.complete(request)
+                agen = provider.stream(request)
+                first_chunk = await agen.__anext__()
+            except StopAsyncIteration:
                 breaker.record_success()
-                return response
+                return
             except ProviderError as e:
                 logger.warning("%s failed: %s", provider.name, e)
                 breaker.record_failure()
                 last_error = e
                 continue
-
+            breaker.record_success()
+            yield first_chunk
+            async for chunk in agen:
+                yield chunk
+            return
         raise AllProvidersFailedError(str(last_error) if last_error else "no providers available")
