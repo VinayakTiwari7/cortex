@@ -2,7 +2,7 @@ from pydantic import BaseModel
 
 
 class ChatMessage(BaseModel):
-    role: str       # "user" or "system" or "assistant"
+    role: str
     content: str
 
 
