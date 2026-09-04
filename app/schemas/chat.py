@@ -8,9 +8,11 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
-    max_tokens: int = 200
+    max_tokens: int = 200                   
+    max_tokens: int = 200                   
 
 
 class ChatResponse(BaseModel):
     provider: str
     answer: str
+    cached: bool = False

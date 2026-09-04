@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
+from app.core.cache import get_cached, set_cached
 from app.core.circuit_breaker import CircuitBreaker
 from app.core.router import AllProvidersFailedError, ProviderRouter
 from app.providers.groq_provider import GroqProvider
@@ -23,10 +24,18 @@ cortex_router = ProviderRouter([
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
+    cached = await get_cached(request)
+    if cached is not None:
+        return cached
+
     try:
-        return await cortex_router.complete(request)
+        response = await cortex_router.complete(request)
     except AllProvidersFailedError as e:
         raise HTTPException(status_code=503, detail=f"all providers unavailable: {e}") from e
+
+    await set_cached(request, response)
+    return response
+
 
 @router.post("/chat/stream")
 async def chat_stream(request: ChatRequest):

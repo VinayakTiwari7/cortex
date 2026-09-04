@@ -12,6 +12,9 @@ class Settings:
     gemini_url: str = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent"
     gemini_stream_url: str = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:streamGenerateContent"
 
+    redis_url: str = os.getenv("REDIS_URL", "")
+    cache_ttl_seconds: int = 3600
+
     request_timeout_seconds: int = 30
 
 

@@ -19,6 +19,23 @@ class ProviderRouter:
     async def complete(self, request: ChatRequest) -> ChatResponse:
         last_error: Exception | None = None
 
+        for provider, breaker in self.providers:
+            if breaker.is_open():
+                logger.warning("%s circuit open, skipping", provider.name)
+                continue
+
+            try:
+                response = await provider.complete(request)
+                breaker.record_success()
+                return response
+            except ProviderError as e:
+                logger.warning("%s failed: %s", provider.name, e)
+                breaker.record_failure()
+                last_error = e
+                continue
+
+        raise AllProvidersFailedError(str(last_error) if last_error else "no providers available")
+
     async def stream(self, request: ChatRequest) -> AsyncGenerator[str, None]:
         last_error: Exception | None = None
 
@@ -34,13 +51,15 @@ class ProviderRouter:
                 breaker.record_success()
                 return
             except ProviderError as e:
-                logger.warning("%s failed: %s", provider.name, e)
+                logger.warning("%s stream failed before first chunk: %s", provider.name, e)
                 breaker.record_failure()
                 last_error = e
                 continue
+
             breaker.record_success()
             yield first_chunk
             async for chunk in agen:
                 yield chunk
             return
+
         raise AllProvidersFailedError(str(last_error) if last_error else "no providers available")
