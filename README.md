@@ -20,7 +20,7 @@ GET  /health           → liveness check
 GET  /health/deep      → live circuit breaker status per provider
 ```
 
-If the primary provider is down, degraded, or rate-limited, Cortex automatically retries against a secondary provider — transparently, with no caller-visible downtime.
+If the primary provider is down, degraded, or rate-limited, Cortex automatically retries against a secondary provider — transparently, with no caller-visible downtime. Each caller is itself rate-limited to protect the gateway from being overwhelmed.
 
 ## Architecture
 
@@ -29,6 +29,7 @@ If the primary provider is down, degraded, or rate-limited, Cortex automatically
 - **Fallback routing** (`app/core/router.py`) — tries each healthy provider in order; on failure, moves to the next automatically. Implemented for both the non-streaming and streaming paths — the streaming version commits to a provider only after its first chunk succeeds, since headers can't be un-sent once a stream begins.
 - **Normalized error handling** — a single `ProviderError` exception absorbs every failure mode (timeouts, malformed responses, HTTP errors, unexpected response shapes) so routing logic has one predictable thing to catch, regardless of the underlying provider.
 - **Redis-backed response caching** (`app/core/cache.py`) — identical requests are served from cache with zero LLM API calls; caching is a pure optimization layer that degrades gracefully (silently no-ops) if Redis is unreachable, rather than taking the whole API down.
+- **Redis-backed rate limiting** (`app/core/rate_limiter.py`) — atomic, per-caller fixed-window limiting via `INCR`/`EXPIRE`, protecting the gateway itself from being overwhelmed; also fails open if Redis is unreachable, consistent with the caching layer's resilience philosophy.
 - **True async streaming** — a chained async generator (provider's SSE stream → provider layer → FastAPI route → client), forwarding tokens the moment they arrive with zero full-response buffering.
 
 ```
@@ -41,7 +42,8 @@ app/
 ├── core/
 │   ├── router.py                 # fallback routing across providers
 │   ├── circuit_breaker.py        # per-provider failure tracking + recovery
-│   └── cache.py                  # Redis-backed response caching
+│   ├── cache.py                  # Redis-backed response caching
+│   └── rate_limiter.py           # Redis-backed per-caller rate limiting
 ├── providers/
 │   ├── base.py                    # abstract Provider contract
 │   ├── groq_provider.py           # Groq implementation
@@ -96,18 +98,6 @@ curl -N -X POST http://127.0.0.1:8000/chat/stream \
   -H "Content-Type: application/json" \
   -d '{"messages": [{"role": "user", "content": "Tell me a short story"}], "max_tokens": 300}'
 ```
-
-## Roadmap
-
-- [x] Unified chat endpoint with provider normalization
-- [x] Real-time streaming via SSE
-- [x] Per-provider circuit breaker with automatic recovery
-- [x] Multi-provider fallback routing (streaming + non-streaming)
-- [x] Redis-backed response caching
-- [x] Health check endpoint with live circuit breaker status
-- [ ] Rate limiting per caller
-- [ ] Structured logging
-- [ ] Automated tests
 
 ## License
 

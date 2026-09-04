@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import StreamingResponse
 
 from app.core.cache import get_cached, set_cached
 from app.core.circuit_breaker import CircuitBreaker
+from app.core.rate_limiter import RateLimiter
 from app.core.router import AllProvidersFailedError, ProviderRouter
 from app.providers.groq_provider import GroqProvider
 from app.providers.gemini_provider import GeminiProvider
@@ -21,8 +22,17 @@ cortex_router = ProviderRouter([
     (gemini_provider, gemini_breaker),
 ])
 
+rate_limiter = RateLimiter(max_requests=10, window_seconds=60)
 
-@router.post("/chat", response_model=ChatResponse)
+
+async def enforce_rate_limit(request: Request) -> None:
+    client_id = request.client.host if request.client else "unknown"
+    allowed = await rate_limiter.is_allowed(client_id)
+    if not allowed:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded — try again shortly")
+
+
+@router.post("/chat", response_model=ChatResponse, dependencies=[Depends(enforce_rate_limit)])
 async def chat(request: ChatRequest) -> ChatResponse:
     cached = await get_cached(request)
     if cached is not None:
@@ -37,7 +47,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
     return response
 
 
-@router.post("/chat/stream")
+@router.post("/chat/stream", dependencies=[Depends(enforce_rate_limit)])
 async def chat_stream(request: ChatRequest):
     async def event_generator():
         try:
